@@ -93,12 +93,12 @@ enum transformation {
     RODFT01    = FFTW_RODFT01,
     RODFT11    = FFTW_RODFT11,
     R2R        = REDFT10,
-    C2R        = -2,
+    C2R        = -3,
     R2C        = -2,
     C2C        = -1
 };
 
-class FFTWData {
+class FFTWDispatcher {
     std::vector<int>       dims;
     std::vector<transformation>  kinds;
     size_t               stride;
@@ -111,7 +111,7 @@ class FFTWData {
     void              *in, *out;
 
 public:
-    FFTWData(std::vector<int> &&dims, bool from_c, bool to_c, transformation tx=REDFT10, bool forward=true, void *din=nullptr, void *dout=nullptr):
+    FFTWDispatcher(std::vector<int> &&dims, bool from_c, bool to_c, transformation tx=REDFT10, bool forward=true, void *din=nullptr, void *dout=nullptr):
         dims(dims), stride(std::accumulate(dims.begin(), dims.end(), UINT64_C(0))),
         owns_in(!din), owns_out(!dout), plan_(nullptr),
         //use_floats(use_f), 
@@ -147,7 +147,7 @@ public:
         }
         make_plan();
     }
-    FFTWData(size_t n, bool from_c=false, bool to_c=false, transformation tx=REDFT10, bool forward=true): FFTWData(std::vector<int>{n}, from_c, to_c, tx, forward, nullptr, nullptr) {}
+    FFTWDispatcher(size_t n, bool from_c=false, bool to_c=false, transformation tx=REDFT10, bool forward=true): FFTWDispatcher(std::vector<int>{n}, from_c, to_c, tx, forward, nullptr, nullptr) {}
 
     void make_plan() {
         if(plan_) fftw_destroy_plan(plan_);
@@ -164,6 +164,10 @@ public:
             case R2C:
                 plan_ = fftw_plan_dft_r2c(dims.size(), dims.data(),
                                           static_cast<double *>(in), static_cast<fftw_complex *>(out), FFTW_MEASURE);
+                break;
+            case C2R:
+                plan_ = fftw_plan_dft_c2r(dims.size(), dims.data(),
+                                          static_cast<fftw_complex *>(in), static_cast<double *>(out), FFTW_MEASURE);
                 break;
             default:
                 std::fprintf(stderr, "Unexpected code %i. Abort!\n", static_cast<int>(tx));
@@ -225,7 +229,7 @@ public:
             }
         }
     }
-    ~FFTWData() {
+    ~FFTWDispatcher() {
         if(plan_) fftw_destroy_plan(plan_);
     }
 };
