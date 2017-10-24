@@ -11,15 +11,15 @@ STD:=c++17
 ifneq (,$(findstring g++,$(CXX)))
 	ifeq ($(shell uname),Darwin)
 		ifeq (,$(findstring clang,$(CXX)))
-            STD :=c++17
-            FLAGS := $(FLAGS) -Wa,-q
+			STD :=c++17
+			FLAGS := $(FLAGS) -Wa,-q
 		else
-            STD :=c++1z
+			STD :=c++1z
 			FLAGS := $(FLAGS) -flto
 			CLHASH_CHECKOUT := "&& git checkout master"
 		endif
-    else
-        FLAGS := $(FLAGS) -flto -std=c++1z
+	else
+		FLAGS := $(FLAGS) -flto -std=c++1z
 	endif
 endif
 OPT:=$(OPT) $(FLAGS)
@@ -43,9 +43,15 @@ INCLUDE=-I.
 
 OBJS:=$(OBJS)
 
-all: $(OBJS) $(EX)
+all: libwht.a $(OBJS) $(EX)
 
 obj: $(OBJS) $(EXEC_OBJS)
+
+spiral-wht-1.8: spiral-wht-1.8.tgz
+	tar -zxf $<
+
+libwht.a: spiral-wht-1.8
+	cd spiral-wht-1.8 && ./configure && make && cp libwht.a .. && cd ..
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(DBG) $(INCLUDE) $(LD) -c $< -o $@ $(LIB)

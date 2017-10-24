@@ -209,19 +209,13 @@ public:
         if(!plan_) throw std::runtime_error("Can not execute null plan.");
         run(in, out);
         switch(static_cast<int>(tx)) {
-            case C2C: {
-                execute_fft(plan_, static_cast<fftw_complex *>(in), static_cast<fftw_complex *>(out)); break;
-            }
-            case R2C: {
-                execute_fft(plan_, static_cast<double *>(in), static_cast<fftw_complex *>(out)); break;
-            }
-            case HC2R:    case R2HC: case DHT:
-            case REDFT00: case REDFT10:
-            case REDFT01: case REDFT11:
-            case RODFT00: case RODFT10:
-            case RODFT01: case RODFT11: {
+            case C2C:     execute_fft(plan_, static_cast<fftw_complex *>(in), static_cast<fftw_complex *>(out)); break;
+            case R2C:     execute_fft(plan_, static_cast<double *>(in), static_cast<fftw_complex *>(out)); break;
+
+            case HC2R:    case R2HC:    case DHT:
+            case REDFT00: case REDFT10: case REDFT01: case REDFT11:
+            case RODFT00: case RODFT10: case RODFT01: case RODFT11:
                 execute_fft(plan_, static_cast<double *>(in), static_cast<double*>(out)); break;
-            }
             default: {
                 std::fprintf(stderr, "Unexpected code %i. Abort!\n", static_cast<int>(tx));
                 exit(EXIT_FAILURE);
