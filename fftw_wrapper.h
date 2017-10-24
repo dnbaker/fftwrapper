@@ -10,10 +10,23 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <type_traits>
+#include "blaze/Math.h"
 #include "fftw3.h"
 
 
 namespace fft {
+
+template<typename T>
+auto get_data(T &a) {
+    if constexpr(blaze::IsMatrix<T>::value) return &a(0, 0);
+    else return &a[0];
+}
+template<typename T>
+const auto get_data(const T &a) {
+    if constexpr(blaze::IsMatrix<T>::value) return &a(0, 0);
+    else return &a[0];
+}
 
 using std::size_t;
 
@@ -170,11 +183,9 @@ class FFTWDispatcher {
     std::vector<tx>       kinds;
     int                  stride;
     bool                forward;
-    bool      owns_in, owns_out;
     typename typeinfo::PlanType    plan_;
     double     add_, mul_, fma_;
     tx                      tx_;
-    void              *in, *out;
     using ComplexType = typename typeinfo::ComplexType;
     static const size_t FloatSize = sizeof(FloatType);
     static const size_t ComplexSize = sizeof(typeinfo::ComplexType);
@@ -183,7 +194,7 @@ class FFTWDispatcher {
 public:
     FFTWDispatcher(std::vector<int> &&dims, bool from_c, bool to_c, tx txarg=DCT, bool forward=true, int stride=1):
         dims(std::move(dims)), stride(stride), forward(forward),
-        owns_in(false), owns_out(false), plan_(nullptr), tx_(txarg), in(nullptr), out(nullptr)
+        plan_(nullptr), tx_(txarg)
     {
         if(!from_c && !to_c) {
             assert(tx_ == REDFT00 || tx_ == REDFT10 || tx_ == REDFT01 || tx_ == REDFT11 ||
@@ -191,12 +202,15 @@ public:
                    tx_ == DHT);
             kinds.resize(dims.size(), tx_);
         }
-        make_plan();
     }
 
     FFTWDispatcher(int n, bool from_c=false, bool to_c=false, tx txarg=REDFT10, bool forward=true, int stride=1): FFTWDispatcher(std::vector<int>{n}, from_c, to_c, txarg, forward, stride) {}
 
-    void make_plan(tx tx_=UNKNOWN) {
+    template<typename T1, typename T2>
+    void make_plan(T1 &in, T2 *out=nullptr, tx tx_=UNKNOWN) {
+        make_plan(get_data(in), get_data(out? *out: in), tx_);
+    }
+    void make_plan(void *in, void *out, tx tx_=UNKNOWN) {
         if(tx_ == UNKNOWN) throw std::runtime_error("Please choose a valid transformation.");
         if(plan_) typeinfo::destroy_fn(plan_);
         switch(static_cast<int>(tx_)) {
@@ -240,19 +254,11 @@ public:
     auto printf(FILE *fp) {
         return typeinfo::fprintfn(plan_, fp);
     }
-    void assign(void *new_in, void *new_out) {
-        assert_aligned(in, ALIGNMENT_SIZE);
-        assert_aligned(out, ALIGNMENT_SIZE);
-        if(owns_in)  alfree(in);
-        if(owns_out) alfree(out);
-        in = new_in, out = new_out;
-        owns_in = owns_out = true;
-    }
-    void run() {
-        run(in, out);
-    }
-    void run(void *inp, void *outp) {
+    template<typename VecType1, typename VecType2>
+    void run(VecType1 &a, VecType2 *b_=nullptr) {
         if(!plan_) throw std::runtime_error("Can not execute null plan.");
+        VecType2 &b(b_ ? *b_: a);
+        const void *inp(get_data(a)), *outp(get_data(b));
         switch(static_cast<int>(tx_)) {
             case C2C:
                 typeinfo::c2cexec(plan_, static_cast<ComplexType *>(inp), static_cast<ComplexType *>(outp)); break;
@@ -275,8 +281,6 @@ public:
     }
     ~FFTWDispatcher() {
         if(plan_) typeinfo::destroy_fn(plan_);
-        if(owns_in) alfree(in);
-        if(owns_out) alfree(out);
     }
 };
 
