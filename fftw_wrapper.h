@@ -177,9 +177,9 @@ enum tx {
 template<typename Vec>
 void print_vec(const Vec &v) {
     ks::KString s;
-    s.sprintf("vec size: %zu\n", v.size());
+    s.sprintf("vec size: %zu\t", v.size());
     for(const auto el: v) s.putc_(','), s.putuw_(el);
-    s.pop();
+    s.back() = '\n';s.terminate();
     fputs(s.data(), stderr);
 }
 
@@ -206,12 +206,14 @@ public:
         dims_(std::move(dims)), stride_(stride), forward_(forward),
         plan_(nullptr), tx_(txarg)
     {
+#if !NDEBUG
         print_vec(dims_);
+#endif
         if(!from_c && !to_c) {
             if(tx_ != REDFT00 && tx_ != REDFT10 && tx_ != REDFT01 && tx_ != REDFT11 &&
                    tx_ != RODFT00 && tx_ != RODFT10 && tx_ != RODFT01 && tx_ != RODFT11 &&
                    tx_ != DHT && tx_ != DCT && tx_ != R2HC) {
-                fprintf(stderr, "tx is %i\n", tx_);
+                fprintf(stderr, "Invalid transformation: %i\n", tx_);
                 std::exit(EXIT_FAILURE);
             }
         }
