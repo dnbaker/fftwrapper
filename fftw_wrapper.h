@@ -174,18 +174,28 @@ enum tx {
     UNKNOWN    = std::numeric_limits<int>::min()
 };
 
+template<typename Vec>
+void print_vec(const Vec &v) {
+    ks::KString s;
+    s.sprintf("vec size: %zu\n", v.size());
+    for(const auto el: v) s.putc_(','), s.putuw_(el);
+    s.pop();
+    fputs(s.data(), stderr);
+}
+
 template<typename FloatType>
 class FFTWDispatcher {
 
     using typeinfo = FFTTypes<FloatType>;
+    using PlanType = typename typeinfo::PlanType;
     
-    std::vector<int>       dims;
-    std::vector<tx>       kinds;
-    int                  stride;
-    bool                forward;
-    typename typeinfo::PlanType    plan_;
-    double     add_, mul_, fma_;
-    tx                      tx_;
+    std::vector<int>       dims_;
+    std::vector<tx>       kinds_;
+    int                  stride_;
+    bool                forward_;
+    PlanType               plan_;
+    double      add_, mul_, fma_;
+    tx                       tx_;
     using ComplexType = typename typeinfo::ComplexType;
     static const size_t FloatSize = sizeof(FloatType);
     static const size_t ComplexSize = sizeof(typeinfo::ComplexType);
@@ -193,45 +203,47 @@ class FFTWDispatcher {
 
 public:
     FFTWDispatcher(std::vector<int> &&dims, bool from_c, bool to_c, tx txarg=DCT, bool forward=true, int stride=1):
-        dims(std::move(dims)), stride(stride), forward(forward),
+        dims_(std::move(dims)), stride_(stride), forward_(forward),
         plan_(nullptr), tx_(txarg)
     {
+        print_vec(dims_);
         if(!from_c && !to_c) {
-            assert(tx_ == REDFT00 || tx_ == REDFT10 || tx_ == REDFT01 || tx_ == REDFT11 ||
-                   tx_ == RODFT00 || tx_ == RODFT10 || tx_ == RODFT01 || tx_ == RODFT11 ||
-                   tx_ == DHT);
-            kinds.resize(dims.size(), tx_);
+            if(tx_ != REDFT00 && tx_ != REDFT10 && tx_ != REDFT01 && tx_ != REDFT11 &&
+                   tx_ != RODFT00 && tx_ != RODFT10 && tx_ != RODFT01 && tx_ != RODFT11 &&
+                   tx_ != DHT && tx_ != DCT && tx_ != R2HC) {
+                fprintf(stderr, "tx is %i\n", tx_);
+                std::exit(EXIT_FAILURE);
+            }
         }
+        fprintf(stderr, "From complex? %s. To complex? %s\n", from_c ? "true": "false", to_c ? "true": "false");
+        kinds_.resize(dims_.size(), tx_);
+        fprintf(stderr, "kinds size: %zu. dims size: %zu\n", kinds_.size(), dims_.size());
     }
 
     FFTWDispatcher(int n, bool from_c=false, bool to_c=false, tx txarg=REDFT10, bool forward=true, int stride=1): FFTWDispatcher(std::vector<int>{n}, from_c, to_c, txarg, forward, stride) {}
 
-    template<typename T1, typename T2>
-    void make_plan(T1 &in, T2 *out=nullptr, tx tx_=UNKNOWN) {
-        make_plan(get_data(in), get_data(out? *out: in), tx_);
-    }
     void make_plan(void *in, void *out, tx txarg) {
         tx_ = txarg;
-        std::fill(kinds.begin(), kinds.end(), tx_);
+        std::fill(kinds_.begin(), kinds_.end(), tx_);
         make_plan(in, out);
     }
     void make_plan(void *in, void *out) {
         if(tx_ == UNKNOWN) throw std::runtime_error("Please choose a valid transformation.");
         if(plan_) typeinfo::destroy_fn(plan_);
+        assert(kinds_.size() == dims_.size());
         switch(static_cast<int>(tx_)) {
             case C2C:
-                plan_ = typeinfo::c2cplan(dims.size(), dims.data(), static_cast<ComplexType *>(in), static_cast<ComplexType *>(out), forward ? FFTW_FORWARD: FFTW_BACKWARD, FFTW_MEASURE);
+                plan_ = typeinfo::c2cplan(dims_.size(), dims_.data(), static_cast<ComplexType *>(in), static_cast<ComplexType *>(out), forward_ ? FFTW_FORWARD: FFTW_BACKWARD, FFTW_MEASURE);
                 break;
             case HC2R: case DHT: case REDFT00: case REDFT10: case REDFT01: case REDFT11: case RODFT00: case RODFT10: case RODFT01: case RODFT11: case R2HC:
-                assert(kinds.size() == dims.size());
-                plan_ = typeinfo::r2rplan(dims.size(), dims.data(), static_cast<FloatType *>(in), static_cast<FloatType *>(out), reinterpret_cast<fftw_r2r_kind*>(kinds.data()), FFTW_MEASURE);
+                plan_ = typeinfo::r2rplan(dims_.size(), dims_.data(), static_cast<FloatType *>(in), static_cast<FloatType *>(out), reinterpret_cast<fftw_r2r_kind*>(kinds_.data()), FFTW_MEASURE);
                 break;
             case R2C:
-                plan_ = typeinfo::r2cplan(dims.size(), dims.data(),
+                plan_ = typeinfo::r2cplan(dims_.size(), dims_.data(),
                                         static_cast<FloatType *>(in), static_cast<ComplexType *>(out), FFTW_MEASURE);
                 break;
             case C2R:
-                plan_ = typeinfo::c2rplan(dims.size(), dims.data(),
+                plan_ = typeinfo::c2rplan(dims_.size(), dims_.data(),
                                         static_cast<ComplexType *>(in), static_cast<FloatType *>(out), FFTW_MEASURE);
                 break;
             default:
