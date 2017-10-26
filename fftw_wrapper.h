@@ -210,7 +210,12 @@ public:
     void make_plan(T1 &in, T2 *out=nullptr, tx tx_=UNKNOWN) {
         make_plan(get_data(in), get_data(out? *out: in), tx_);
     }
-    void make_plan(void *in, void *out, tx tx_=UNKNOWN) {
+    void make_plan(void *in, void *out, tx txarg) {
+        tx_ = txarg;
+        std::fill(kinds.begin(), kinds.end(), tx_);
+        make_plan(in, out);
+    }
+    void make_plan(void *in, void *out) {
         if(tx_ == UNKNOWN) throw std::runtime_error("Please choose a valid transformation.");
         if(plan_) typeinfo::destroy_fn(plan_);
         switch(static_cast<int>(tx_)) {
@@ -254,24 +259,27 @@ public:
     auto printf(FILE *fp) {
         return typeinfo::fprintfn(plan_, fp);
     }
-    template<typename VecType1, typename VecType2>
-    void run(VecType1 &a, VecType2 *b_=nullptr) {
+    template<typename DType1, typename DType2>
+    void run(DType1 *a, DType2 *b=nullptr) {
         if(!plan_) throw std::runtime_error("Can not execute null plan.");
-        VecType2 &b(b_ ? *b_: a);
-        const void *inp(get_data(a)), *outp(get_data(b));
+        void *inp(a), *outp(b ? b: a);
+#if 0
+    template<typename ValType1, typename ValType2, typename=std::enable_if_t<std::is_floating_point<ValType1>::value>, typename=std::enable_if_t<std::is_floating_point<ValType2>::value>>
+    void run(const ValType1 *inp, ValType2 *outp)
+#endif
         switch(static_cast<int>(tx_)) {
             case C2C:
-                typeinfo::c2cexec(plan_, static_cast<ComplexType *>(inp), static_cast<ComplexType *>(outp)); break;
+                typeinfo::c2cexec(plan_, reinterpret_cast<ComplexType *>(inp), reinterpret_cast<ComplexType *>(outp)); break;
             case R2C:
-                typeinfo::r2cexec(plan_, static_cast<FloatType *>(inp), static_cast<ComplexType *>(outp)); break;
+                typeinfo::r2cexec(plan_, reinterpret_cast<FloatType *>(inp), reinterpret_cast<ComplexType *>(outp)); break;
             case C2R:
-                typeinfo::c2rexec(plan_, static_cast<FloatType *>(inp), static_cast<ComplexType *>(outp)); break;
+                typeinfo::c2rexec(plan_, reinterpret_cast<ComplexType *>(inp), reinterpret_cast<FloatType *>(outp)); break;
             case HC2R:    case R2HC: case DHT:
             case REDFT00: case REDFT10:
             case REDFT01: case REDFT11:
             case RODFT00: case RODFT10:
             case RODFT01: case RODFT11:
-                typeinfo::r2rexec(plan_, static_cast<FloatType *>(inp), static_cast<FloatType*>(outp)); break;
+                typeinfo::r2rexec(plan_, reinterpret_cast<FloatType *>(inp), reinterpret_cast<FloatType*>(outp)); break;
             default: {
                 std::fprintf(stderr, "Unexpected code %i. Abort!\n", static_cast<int>(tx_));
                 exit(EXIT_FAILURE);
