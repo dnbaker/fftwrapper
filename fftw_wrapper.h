@@ -30,7 +30,7 @@ const auto get_data(const T &a) {
 
 using std::size_t;
 
-static inline void *almalloc(size_t aln, size_t sz) {
+static inline void *almalloc([[maybe_unused]] size_t aln, size_t sz) {
 #if _GLIBCXX_HAVE_ALIGNED_ALLOC
     return std::aligned_alloc(aln, sz);
 #else
@@ -179,11 +179,12 @@ void print_vec(const Vec &v) {
     ks::KString s;
     s.sprintf("vec size: %zu\t", v.size());
     for(const auto el: v) s.putc_(','), s.putuw_(el);
-    s.back() = '\n';s.terminate();
-    fputs(s.data(), stderr);
+    s += '\n';
+    s.terminate();
+    fwrite(s.data(), 1, s.size(), stderr);
 }
 
-template<typename FloatType>
+template<typename FloatType, typename=std::enable_if_t<std::is_floating_point<FloatType>::value>>
 class FFTWDispatcher {
 
     using typeinfo = FFTTypes<FloatType>;
