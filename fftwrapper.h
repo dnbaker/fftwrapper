@@ -22,6 +22,8 @@ auto get_data(T &a) {
     if constexpr(blaze::IsMatrix<T>::value) return &a(0, 0);
     else return &a[0];
 }
+template<typename T> class TD;
+
 template<typename T>
 const auto get_data(const T &a) {
     if constexpr(blaze::IsMatrix<T>::value) return &a(0, 0);
@@ -68,6 +70,7 @@ struct FFTTypes<float> {
     static constexpr decltype(&fftwf_plan_dft_c2r) c2rplan = &fftwf_plan_dft_c2r;
     static constexpr decltype(&fftwf_plan_dft) c2cplan = &fftwf_plan_dft;
     static constexpr decltype(&fftwf_plan_r2r) r2rplan = &fftwf_plan_r2r;
+    static constexpr decltype(&fftwf_plan_r2r_1d) r2rplan1d = &fftwf_plan_r2r_1d;
 };
 template<>
 struct FFTTypes<double> {
@@ -88,6 +91,7 @@ struct FFTTypes<double> {
     static constexpr decltype(&fftw_plan_dft_c2r) c2rplan = &fftw_plan_dft_c2r;
     static constexpr decltype(&fftw_plan_dft) c2cplan = &fftw_plan_dft;
     static constexpr decltype(&fftw_plan_r2r) r2rplan = &fftw_plan_r2r;
+    static constexpr decltype(&fftw_plan_r2r_1d) r2rplan1d = &fftw_plan_r2r_1d;
 };
 template<>
 struct FFTTypes<long double> {
@@ -108,6 +112,7 @@ struct FFTTypes<long double> {
     static constexpr decltype(&fftwl_plan_dft_c2r) c2cplan = &fftwl_plan_dft_c2r;
     static constexpr decltype(&fftwl_plan_dft) c2rplan = &fftwl_plan_dft;
     static constexpr decltype(&fftwl_plan_r2r) r2rplan = &fftwl_plan_r2r;
+    static constexpr decltype(&fftwl_plan_r2r_1d) r2rplan1d = &fftwl_plan_r2r_1d;
 };
 
 #define USE_MANUAL 0
@@ -173,6 +178,7 @@ enum tx {
     C2C        = -1,
     UNKNOWN    = std::numeric_limits<int>::min()
 };
+
 
 template<typename Vec>
 void print_vec(const Vec &v) {
@@ -241,7 +247,14 @@ public:
                 plan_ = typeinfo::c2cplan(dims_.size(), dims_.data(), static_cast<ComplexType *>(in), static_cast<ComplexType *>(out), forward_ ? FFTW_FORWARD: FFTW_BACKWARD, FFTW_MEASURE);
                 break;
             case HC2R: case DHT: case REDFT00: case REDFT10: case REDFT01: case REDFT11: case RODFT00: case RODFT10: case RODFT01: case RODFT11: case R2HC:
-                plan_ = typeinfo::r2rplan(dims_.size(), dims_.data(), static_cast<FloatType *>(in), static_cast<FloatType *>(out), reinterpret_cast<fftw_r2r_kind*>(kinds_.data()), FFTW_MEASURE);
+                if(dims_.size() > 1) {
+                    plan_ = typeinfo::r2rplan(dims_.size(), dims_.data(), static_cast<FloatType *>(in), static_cast<FloatType *>(out),
+                                              reinterpret_cast<fftw_r2r_kind*>(kinds_.data()), FFTW_MEASURE);
+                } else {
+                    auto inp(static_cast<FloatType *>(in)), outp(static_cast<FloatType *>(out));
+                    plan_ = typeinfo::r2rplan1d(dims_[0], inp, outp,
+                                                tx_, FFTW_MEASURE);
+                }
                 break;
             case R2C:
                 plan_ = typeinfo::r2cplan(dims_.size(), dims_.data(),
@@ -300,7 +313,6 @@ public:
             case REDFT01: case REDFT11:
             case RODFT00: case RODFT10:
             case RODFT01: case RODFT11:
-                std::cerr << "Executing r2r\n";
                 typeinfo::r2rexec(plan_, reinterpret_cast<FloatType *>(inp), reinterpret_cast<FloatType*>(outp)); break;
             default: {
                 std::fprintf(stderr, "Unexpected code %i. Abort!\n", static_cast<int>(tx_));
