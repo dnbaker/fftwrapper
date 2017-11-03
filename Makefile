@@ -27,7 +27,7 @@ FLOAT_TYPE=double
 XXFLAGS=-fno-rtti
 CXXFLAGS=$(OPT) $(XXFLAGS) -std=$(STD) $(WARNINGS) -DFLOAT_TYPE=$(FLOAT_TYPE)
 CCFLAGS=$(OPT) -std=c11 $(WARNINGS)
-LIB=-lz -lopenblas -lfftw3
+LIB=-lz -lopenblas -lfftw3 -lfftw3l -lfftw3f
 LD=-L. -L/opt/local/lib
 
 OBJS=$(patsubst %.cpp,%.o,$(wildcard lib/*.cpp))

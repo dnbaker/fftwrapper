@@ -176,10 +176,10 @@ enum tx {
 
 template<typename Vec>
 void print_vec(const Vec &v) {
-    ks::KString s;
-    s.sprintf("vec size: %zu\t", v.size());
-    for(const auto el: v) s.putc_(','), s.putuw_(el);
-    s.back() = '\n';s.terminate();
+    std::string s;
+    s += "vec size: "; s += std::to_string(v.size()); s += '\t';
+    for(const auto el: v) s += ',', s += std::to_string(el);
+    s += '\n';
     fputs(s.data(), stderr);
 }
 
@@ -224,8 +224,11 @@ public:
 
     FFTWDispatcher(int n, bool from_c=false, bool to_c=false, tx txarg=REDFT10, bool forward=true, int stride=1): FFTWDispatcher(std::vector<int>{n}, from_c, to_c, txarg, forward, stride) {}
 
+    void make_plan(void *in) {
+        make_plan(in, in, tx_);
+    }
     void make_plan(void *in, void *out, tx txarg) {
-        tx_ = txarg;
+        tx_ = txarg == UNKNOWN ? tx_: txarg;
         std::fill(kinds_.begin(), kinds_.end(), tx_);
         make_plan(in, out);
     }
@@ -273,8 +276,12 @@ public:
     auto printf(FILE *fp) {
         return typeinfo::fprintfn(plan_, fp);
     }
+    template<typename DType1>
+    void run(DType1 *a) {
+        run(a, a);
+    }
     template<typename DType1, typename DType2>
-    void run(DType1 *a, DType2 *b=nullptr) {
+    void run(DType1 *a, DType2 *b) {
         if(!plan_) throw std::runtime_error("Can not execute null plan.");
         void *inp(a), *outp(b ? b: a);
 #if 0
@@ -293,6 +300,7 @@ public:
             case REDFT01: case REDFT11:
             case RODFT00: case RODFT10:
             case RODFT01: case RODFT11:
+                std::cerr << "Executing r2r\n";
                 typeinfo::r2rexec(plan_, reinterpret_cast<FloatType *>(inp), reinterpret_cast<FloatType*>(outp)); break;
             default: {
                 std::fprintf(stderr, "Unexpected code %i. Abort!\n", static_cast<int>(tx_));
