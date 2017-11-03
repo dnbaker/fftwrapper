@@ -22,6 +22,8 @@ auto get_data(T &a) {
     if constexpr(blaze::IsMatrix<T>::value) return &a(0, 0);
     else return &a[0];
 }
+template<typename T> class TD;
+
 template<typename T>
 const auto get_data(const T &a) {
     if constexpr(blaze::IsMatrix<T>::value) return &a(0, 0);
@@ -68,6 +70,7 @@ struct FFTTypes<float> {
     static constexpr decltype(&fftwf_plan_dft_c2r) c2rplan = &fftwf_plan_dft_c2r;
     static constexpr decltype(&fftwf_plan_dft) c2cplan = &fftwf_plan_dft;
     static constexpr decltype(&fftwf_plan_r2r) r2rplan = &fftwf_plan_r2r;
+    static constexpr decltype(&fftwf_plan_r2r_1d) r2rplan1d = &fftwf_plan_r2r_1d;
 };
 template<>
 struct FFTTypes<double> {
@@ -88,6 +91,7 @@ struct FFTTypes<double> {
     static constexpr decltype(&fftw_plan_dft_c2r) c2rplan = &fftw_plan_dft_c2r;
     static constexpr decltype(&fftw_plan_dft) c2cplan = &fftw_plan_dft;
     static constexpr decltype(&fftw_plan_r2r) r2rplan = &fftw_plan_r2r;
+    static constexpr decltype(&fftw_plan_r2r_1d) r2rplan1d = &fftw_plan_r2r_1d;
 };
 template<>
 struct FFTTypes<long double> {
@@ -108,6 +112,7 @@ struct FFTTypes<long double> {
     static constexpr decltype(&fftwl_plan_dft_c2r) c2cplan = &fftwl_plan_dft_c2r;
     static constexpr decltype(&fftwl_plan_dft) c2rplan = &fftwl_plan_dft;
     static constexpr decltype(&fftwl_plan_r2r) r2rplan = &fftwl_plan_r2r;
+    static constexpr decltype(&fftwl_plan_r2r_1d) r2rplan1d = &fftwl_plan_r2r_1d;
 };
 
 #define USE_MANUAL 0
@@ -174,14 +179,14 @@ enum tx {
     UNKNOWN    = std::numeric_limits<int>::min()
 };
 
+
 template<typename Vec>
 void print_vec(const Vec &v) {
-    ks::KString s;
-    s.sprintf("vec size: %zu\t", v.size());
-    for(const auto el: v) s.putc_(','), s.putuw_(el);
+    std::string s;
+    s += "vec size: "; s += std::to_string(v.size()); s += '\t';
+    for(const auto el: v) s += ',', s += std::to_string(el);
     s += '\n';
-    s.terminate();
-    fwrite(s.data(), 1, s.size(), stderr);
+    fputs(s.data(), stderr);
 }
 
 template<typename FloatType, typename=std::enable_if_t<std::is_floating_point<FloatType>::value>>
@@ -225,8 +230,11 @@ public:
 
     FFTWDispatcher(int n, bool from_c=false, bool to_c=false, tx txarg=REDFT10, bool forward=true, int stride=1): FFTWDispatcher(std::vector<int>{n}, from_c, to_c, txarg, forward, stride) {}
 
+    void make_plan(void *in) {
+        make_plan(in, in, tx_);
+    }
     void make_plan(void *in, void *out, tx txarg) {
-        tx_ = txarg;
+        tx_ = txarg == UNKNOWN ? tx_: txarg;
         std::fill(kinds_.begin(), kinds_.end(), tx_);
         make_plan(in, out);
     }
@@ -239,7 +247,14 @@ public:
                 plan_ = typeinfo::c2cplan(dims_.size(), dims_.data(), static_cast<ComplexType *>(in), static_cast<ComplexType *>(out), forward_ ? FFTW_FORWARD: FFTW_BACKWARD, FFTW_MEASURE);
                 break;
             case HC2R: case DHT: case REDFT00: case REDFT10: case REDFT01: case REDFT11: case RODFT00: case RODFT10: case RODFT01: case RODFT11: case R2HC:
-                plan_ = typeinfo::r2rplan(dims_.size(), dims_.data(), static_cast<FloatType *>(in), static_cast<FloatType *>(out), reinterpret_cast<fftw_r2r_kind*>(kinds_.data()), FFTW_MEASURE);
+                if(dims_.size() > 1) {
+                    plan_ = typeinfo::r2rplan(dims_.size(), dims_.data(), static_cast<FloatType *>(in), static_cast<FloatType *>(out),
+                                              reinterpret_cast<fftw_r2r_kind*>(kinds_.data()), FFTW_MEASURE);
+                } else {
+                    auto inp(static_cast<FloatType *>(in)), outp(static_cast<FloatType *>(out));
+                    plan_ = typeinfo::r2rplan1d(dims_[0], inp, outp,
+                                                tx_, FFTW_MEASURE);
+                }
                 break;
             case R2C:
                 plan_ = typeinfo::r2cplan(dims_.size(), dims_.data(),
@@ -274,8 +289,12 @@ public:
     auto printf(FILE *fp) {
         return typeinfo::fprintfn(plan_, fp);
     }
+    template<typename DType1>
+    void run(DType1 *a) {
+        run(a, a);
+    }
     template<typename DType1, typename DType2>
-    void run(DType1 *a, DType2 *b=nullptr) {
+    void run(DType1 *a, DType2 *b) {
         if(!plan_) throw std::runtime_error("Can not execute null plan.");
         void *inp(a), *outp(b ? b: a);
 #if 0
