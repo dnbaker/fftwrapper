@@ -253,7 +253,7 @@ public:
                 } else {
                     auto inp(static_cast<FloatType *>(in)), outp(static_cast<FloatType *>(out));
                     plan_ = typeinfo::r2rplan1d(dims_[0], inp, outp,
-                                                tx_, FFTW_MEASURE);
+                                                (fftw_r2r_kind)tx_, FFTW_MEASURE);
                 }
                 break;
             case R2C:
